@@ -36,21 +36,31 @@
 
 # Class RpcServer
 
-  服务用于等待客户端连接, 客户端连接后, 即可彼此进行方法调用
+  服务用于等待客户端连接, 客户端连接后, 即可彼此进行方法调用,
+  下文中的 context 用于保持一个对端连接的上下文 (类似 session), 它不会传递到对端,
+  当连接中断 context 就会生成一个新的.
+
 
 ## Events
 
-### connection : Function(TLSSocket client)
+### connection : Function(context, tls.Socket client)
 
-  服务器收到一个客户端连接, 服务端导出的包将被 client 继承.
+  服务器收到一个客户端连接, 并且能完成认证.
+  client 对象是 TLS 底层对象, 通常不使用.
 
-### error : Function(error)
+### closed : Function(context, tls.Socket client)
 
-  服务器发生错误.
+  服务器与对端的连接断开收到这个消息, context 是一个空对象, 是与 connection 相同的一个
+  对象, 方便设置与连接相关的数据; 收到这个消息的时候 client 已经处于关闭状态.
 
-### message : Function(name, data)
+### error : Function(error, context)
 
-  由对端发送来的消息, 使用 send 函数
+  服务器发生错误. context 对象与 connection 中的相同.
+  当发生认证错误的时候服务器端也会收到这个消息, 但 closed 消息不会被发出.
+
+### msg-[name] : Function(name, data, context)
+
+  由对端使用 send 函数发送来的消息, 消息总是以 `msg-` 为前缀.
 
 ### write-stream : Function(name, stream.Writable writer)
 
@@ -73,6 +83,7 @@
 5. 参数必须是可以 JSON.stringify 的类型, 复杂的类型会丢失数据.
 6. 导出端不可以使用 arguments 进行动态参数传递.
 7. 导出端使用 return 返回的数据会被忽略.
+8. 导出函数可以使用 this 来引用上下文 context.
 
 ### RpcServer.exports(String name, Object obj)
 
@@ -83,7 +94,8 @@
 
 ### RpcServer.require(String name, Function ret(Error err, Object module1))
 
-  引入对端包, 之后可以通过 obj 直接调用导出方法; 出错设置 err, 正确则返回包对象
+  引入对端包, 之后可以通过 obj 直接调用导出方法; 出错设置 err, 正确则返回包对象,
+  服务端应该等到 `connection` 消息到达后进行这个操作, 客户端没有此要求.
 
 ### RpcServer.require(Array names, Function ret(Error err, Object mod1, Object mod2, ...))
 
@@ -91,7 +103,8 @@
 
 ### RpcServer.send(String name, Object data)
 
-  向对端发送消息
+  向对端发送消息, 这就发出一个名称为 `msg-[name]` 的消息,
+  参数为回调的函数为: Function(name, data)
 
 ### RpcServer.close()
 
@@ -115,11 +128,16 @@
 
   定义与 RpcServer 相同
 
-### connection : Function()
-### error : Function(err)
-### message : Function(name, msg)
+### connection : Function(context, tls.Client)
+
+  客户端成功连接到服务端, 并且能成功认证, 一旦连接断开并再次重试成功, 这个
+  消息将会再次发出.
+
+### closed       : Function(context, tls.Socket client)
+### error        : Function(err, context)
+### message      : Function(name, msg, context)
 ### write-stream : Function(name, stream.Writable writer)
-### read-stream : Function(name, stream.Readable reader)
+### read-stream  : Function(name, stream.Readable reader)
 
 ## API
 
