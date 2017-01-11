@@ -2,6 +2,7 @@ try {
   !describe;
 } catch(e) {
   throw 'cannot find `mocha`, please npm install mocha -g';
+  return;
 }
 
 var rpc = require('../');
@@ -9,14 +10,16 @@ var fs = require("fs");
 var assert = require('assert');
 var crypto = require('crypto');
 
-var timeout0 = 5;
-rpc.retrydelay(0.1);
+var timeout0 = 0.01;
+rpc.retrydelay(0.01);
 rpc.timeout(timeout0);
 var errstr = crypto.randomBytes(10).toString('base64');
 
 function rand() {
   return parseInt(Math.random() * 10000);
 }
+
+var TCP_PORT = 1001;
 
 var __mod1 = {
   attr1: rand(),
@@ -44,53 +47,50 @@ var jpserver = JSON.parse(fs.readFileSync(__dirname + '/server.jpfx', 'utf8'));
 var jpclient = JSON.parse(fs.readFileSync(__dirname + '/client.jpfx', 'utf8'));
 
 // var cluster = require('cluster');
-var server, client;
+var server, client, serverA;
 
 describe('create server', function() {
-  server = rpc.createServer(jpserver, 1000, 'test', 'test');
 
-  server.on('error', function(e) {
-    console.log('server fail 1:', e.message);
-    // process.exit(1);
-  });
+  it('@conn', function(done) {
+    var server0 = rpc.createServer(jpserver, TCP_PORT, 'test', 'test');
+    serverA = server0;
 
-  it('server connect', function(done) {
-    server.on('connection', function() {
-      done();
+    server0.on('error', function(e) {
+      console.log('server fail 1:', e.message);
     });
+
+    server0.on('beforeConnect', function(context, peer) {
+      peer.on('error', function(e) {
+        console.log('server socket fail:', e.message);
+      });
+      peer.exports('mod1', __mod1);
+      peer.exports('mod2', __mod2);
+    });
+
+    server0.on('connection', function(context, peer) {
+      server = peer;
+    });
+    done();
   });
+
 });
 
 
 describe('create client', function() {
-  client = rpc.connect(jpclient, 1000, 'test', 'test');
 
-  client.on('error', function(e) {
-    console.log('! fail, client fail', e.message);
-    // process.exit(1);
-  });
+  it('@conn', function(done) {
+    client = rpc.connect(jpclient, TCP_PORT, 'test', 'test');
 
-  var _conn = false;
-  client.on('connection', function() {
-    _conn = true;
-  });
+    client.on('error', function(e) {
+      console.log('! fail, client fail', e.message);
+    });
 
-  it('client connect', function(done) {
-    if (_conn) {
+    client.on('connection', function() {
+      client.exports('cmod', __cmod);
       done();
-    } else {
-      client.on('connection', function() {
-        done();
-      });
-    }
+    });
   });
-});
 
-
-describe('exports server/client lib', function() {
-  server.exports('mod1', __mod1);
-  server.exports('mod2', __mod2);
-  client.exports('cmod', __cmod);
 });
 
 

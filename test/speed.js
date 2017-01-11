@@ -1,3 +1,11 @@
+try {
+  if (describe) {
+    console.log('is not `mocha` test.');
+    return;
+  }
+} catch(e) {
+}
+
 var rpc = require('../');
 var fs = require("fs");
 var cluster = require('cluster');
@@ -31,9 +39,12 @@ if (cluster.isMaster) {
     },
   };
 
-  server.exports('mod1', __mod1);
+  server.on('connection', function(context, peer) {
+    peer.exports('mod1', __mod1);
+  });
+
   cluster.fork();
-  
+
 } else {
 
   var client = rpc.connect(jpclient, 1000, 'test', 'test');

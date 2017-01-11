@@ -11,14 +11,14 @@
 
 ## rpc.retrydelay(int)
 
-  设置连接不到服务器(没有节点应答时)的重试延迟, 默认 5 秒, 参数单位为 `秒`.
+  设置连接不到服务器(没有节点应答时)的重试延迟, 默认 1 秒, 参数单位为 `秒`.
   当尝试连接服务器失败, 则会进行重试, 如果已经连接到服务器时连接丢失, 且没有备用连接,
   也会进行重试, 如果有备用连接则立即切换.
 
 ## rpc.timeout(int)
 
   设置或返回超时, 当一个函数调用超过时间没有返回则会使回调函数超时. 单位 `秒`.
-  默认 30 秒.
+  默认 5 秒.
 
 ## rpc.createServer(jpfx, port, name, pass)
 
@@ -40,22 +40,57 @@
   下文中的 context 用于保持一个对端连接的上下文 (类似 session), 它不会传递到对端,
   当连接中断 context 就会生成一个新的.
 
-
 ## Events
 
-### connection : Function(context, tls.Socket client)
+### beforeConnect : Function(context, RpcClient)
+
+  在正式建立稳定连接之前发出的消息, 此时在 RpcClient 导出模块是安全的.
+
+### connection : Function(context, RpcClient)
 
   服务器收到一个客户端连接, 并且能完成认证.
   client 对象是 TLS 底层对象, 通常不使用.
 
-### closed : Function(context, tls.Socket client)
+### closed : Function(tls.TLSServer)
 
-  服务器与对端的连接断开收到这个消息, context 是一个空对象, 是与 connection 相同的一个
+  服务器与对端的连接断开收到这个消息, context 是一个对象, 是与 connection 相同的一个
   对象, 方便设置与连接相关的数据; 收到这个消息的时候 client 已经处于关闭状态.
 
 ### error : Function(error, context)
 
   服务器发生错误. context 对象与 connection 中的相同.
+  当发生认证错误的时候服务器端也会收到这个消息, 但 closed 消息不会被发出.
+
+## API
+
+### RpcServer.sendAll(String name, Object data)
+
+  向所有客户端发送消息, 这就发出一个名称为 `msg-[name]` 的消息,
+  参数为回调的函数为: Function(name, data)
+
+### RpcServer.close(Function callback)
+
+  关闭所有连接, 服务器不再接受请求.
+
+# Class RpcClient
+
+  客户端一旦与服务器连接, 即可彼此进行方法调用
+
+## Events
+
+### connection : Function(context, tls.Client)
+
+  客户端成功连接到服务端, 并且能成功认证, 一旦连接断开并再次重试成功, 这个
+  消息将会再次发出.
+
+### closed : Function(context, tls.Socket client)
+
+  与对端的连接断开收到这个消息, context 是一个对象, 是与 connection 相同的一个
+  对象, 方便设置与连接相关的数据; 收到这个消息的时候 client 已经处于关闭状态.
+
+### error : Function(err, context)
+
+  发生错误. context 对象与 connection 中的相同.
   当发生认证错误的时候服务器端也会收到这个消息, 但 closed 消息不会被发出.
 
 ### msg-[name] : Function(name, data, context)
@@ -66,7 +101,7 @@
 
   对端需要读取一些数据发出这个消息, 通过 writer 写入的数据, 将传入对端
 
-### read-stream : Function(name, stream.Readable reader)
+### read-stream  : Function(name, stream.Readable reader)
 
   对端需要写入一些数据发出这个消息, 通过 reader 读取对端发送的数据
 
@@ -85,67 +120,36 @@
 7. 导出端使用 return 返回的数据会被忽略.
 8. 导出函数可以使用 this 来引用上下文 context.
 
-### RpcServer.exports(String name, Object obj)
+### RpcClient.exports(String name, Object obj)
 
-  到出一个包为 name, 导出给对端; obj 中所有方法会被导出, 注意不支持多层级.
+  导出一个包为 name, 导出给对端; obj 中所有方法会被导出, 注意不支持多层级.
   当一段时间后第二次导出相同的包但对象不同, 对端在重新 require 之前继续使用
   第一次导出的对象, 这会引起对端异常.
   如果导出的函数参数有误, 这个方法将直接抛出异常.
 
-### RpcServer.require(String name, Function ret(Error err, Object module1))
+### RpcClient.require(String name, Function ret(Error err, Object module1))
 
   引入对端包, 之后可以通过 obj 直接调用导出方法; 出错设置 err, 正确则返回包对象,
   服务端应该等到 `connection` 消息到达后进行这个操作, 客户端没有此要求.
 
-### RpcServer.require(Array names, Function ret(Error err, Object mod1, Object mod2, ...))
+### RpcClient.require(Array names, Function ret(Error err, Object mod1, Object mod2, ...))
 
   引入一系列包, 一个包出错, 则会设置 err, 成功则按照 names 的顺序输出包.
 
-### RpcServer.send(String name, Object data)
+### RpcClient.send(String name, Object data)
 
   向对端发送消息, 这就发出一个名称为 `msg-[name]` 的消息,
   参数为回调的函数为: Function(name, data)
 
-### RpcServer.close()
+### RpcClient.close()
 
-  关闭所有链接
+  关闭链接
 
-### RpcServer.openWritableStream(String name)
+### RpcClient.openWritableStream(String name)
 
   尝试打开一个写入流, name 是流的名字, 当对端收到打开流消息时附带这个名词.
   这会向对端发起 read-stream 消息, 此端写入的数据由对端读取.
 
-### RpcServer.openReadableStream(String name)
+### RpcClient.openReadableStream(String name)
 
   尝试打开一个读取流, 对端会收到一个 write-stream 消息, 对端发送的数据由本端读取.
-
-
-# Class RpcClient
-
-  客户端一旦与服务器连接, 即可彼此进行方法调用
-
-## Events
-
-  定义与 RpcServer 相同
-
-### connection : Function(context, tls.Client)
-
-  客户端成功连接到服务端, 并且能成功认证, 一旦连接断开并再次重试成功, 这个
-  消息将会再次发出.
-
-### closed       : Function(context, tls.Socket client)
-### error        : Function(err, context)
-### message      : Function(name, msg, context)
-### write-stream : Function(name, stream.Writable writer)
-### read-stream  : Function(name, stream.Readable reader)
-
-## API
-
-  这些定义与 RpcServer 中的相同
-
-### RpcClient.exports
-### RpcClient.require
-### RpcClient.send
-### RpcClient.close
-### RpcClient.openWritableStream(String name)
-### RpcClient.openReadableStream(String name)
