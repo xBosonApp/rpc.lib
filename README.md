@@ -4,7 +4,7 @@
 
 `npm install rpc.lib --save`
 
-该项目没有加入公共 npm 库.
+该项目没有加入公共 npm 库, 如需要自行解决.
 
 
 # API
