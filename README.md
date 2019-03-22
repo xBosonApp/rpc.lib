@@ -4,6 +4,8 @@
 
 `npm install rpc.lib --save`
 
+该项目没有加入公共 npm 库.
+
 
 # API
 
@@ -18,7 +20,7 @@
 ## rpc.timeout(int)
 
   设置或返回超时, 当一个函数调用超过时间没有返回则会使回调函数超时. 单位 `秒`.
-  默认 5 秒.
+  默认 120 秒.
 
 ## rpc.createServer(jpfx, port, name, pass)
 
@@ -44,7 +46,8 @@
 
 ### beforeConnect : Function(context, RpcClient)
 
-  在正式建立稳定连接之前发出的消息, 此时在 RpcClient 导出模块是安全的.
+  在正式建立稳定连接之前发出的消息, 此时在 RpcClient 导出模块是安全的.  
+  context: { address, remote }, 本地连接属性和远程连接属性. 
 
 ### connection : Function(context, RpcClient)
 
